@@ -62,7 +62,7 @@ main {
     align-items: center;
     justify-content: center;
 }
-.weglow-title1{
+.title1{
     font-family: "Tiro Devanagari Marathi", "serif";
     font-size: 90px;
     font-weight: normal;
@@ -73,7 +73,7 @@ main {
     align-self: center;
 }
 
-.weglow-title {
+.title {
     font-family: "Tiro Devanagari Marathi", "serif";
     font-size: 90px;
     font-weight: normal;
@@ -261,4 +261,5 @@ main {
 .logout-btn:hover {
     background-color: #9e9e9e;
     /* Darker gray on hover */
+
 }
