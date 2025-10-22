@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create Account</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main>
+    <div class="movable-login-container">
+      <h1 class="weglow-title">Create Account</h1>
+      <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
+        Type your password <strong id="attempt-count">3</strong> more time(s) to create your typing profile
+      </p>
+      <form class="login-form">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" placeholder="Username" required>
+        
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" placeholder="Password" required>
+        
+        <button type="submit" class="sign-in-btn">Register</button>
+      </form>
+    </div>
+  </main>
+
+  <script>
+    const samples = [];
+    const requiredSamples = 3;
+    let currentPassword = '';
+    
+    const keyEvents = [];
+    const holdTimes = [];
+    const flightTimes = [];
+    let lastKeyUpTime = null;
+    
+    const passwordInput = document.querySelector('#password');
+    const usernameInput = document.querySelector('#username');
+    
+    passwordInput.addEventListener('focus', () => {
+      keyEvents.length = 0;
+      holdTimes.length = 0;
+      flightTimes.length = 0;
+      lastKeyUpTime = null;
+    });
+    
+    passwordInput.addEventListener('keydown', (e) => {
+      if (e.key.length > 1 && e.key !== 'Backspace') return;
+      
+      const now = performance.now();
+      keyEvents.push({ key: e.key, down: now });
+      
+      if (lastKeyUpTime !== null) {
+        const flight = now - lastKeyUpTime;
+        flightTimes.push(flight);
+      }
+    });
+    
+    passwordInput.addEventListener('keyup', (e) => {
+      const now = performance.now();
+      const press = keyEvents.find(k => k.key === e.key && !k.up);
+      
+      if (press) {
+        press.up = now;
+        const hold = press.up - press.down;
+        holdTimes.push(hold);
+      }
+      
+      lastKeyUpTime = now;
+    });
+    
+    function mean(arr) {
+      if (arr.length === 0) return 0;
+      return arr.reduce((a, b) => a + b, 0) / arr.length;
+    }
+    
+    function std(arr) {
+      if (arr.length === 0) return 0;
+      const m = mean(arr);
+      const variance = arr.reduce((a, b) => a + (b - m) ** 2, 0) / arr.length;
+      return Math.sqrt(variance);
+    }
+    
+    function removeOutliers(arr, maxValue) {
+      return arr.filter(t => t < maxValue && t > 0);
+    }
+    
+    document.querySelector('.login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const username = usernameInput.value;
+      const password = passwordInput.value;
+      
+      if (password.length < 6) {
+        alert("Password must be at least 6 characters");
+        return;
+      }
+      
+      if (holdTimes.length < 5 || flightTimes.length < 4) {
+        alert("Password too short");
+        return;
+      }
+      
+      if (samples.length > 0 && password !== currentPassword) {
+        alert("Please type the same password");
+        passwordInput.value = '';
+        return;
+      }
+      
+      currentPassword = password;
+      
+      const cleanHold = removeOutliers(holdTimes, 500);
+      const cleanFlight = removeOutliers(flightTimes, 2000);
+      
+      if (cleanHold.length < 3 || cleanFlight.length < 2) {
+        alert("Please type without long pauses");
+        keyEvents.length = 0;
+        holdTimes.length = 0;
+        flightTimes.length = 0;
+        lastKeyUpTime = null;
+        passwordInput.value = '';
+        return;
+      }
+      
+      samples.push({
+        holdTimes: cleanHold,
+        flightTimes: cleanFlight
+      });
+      
+      console.log(`Sample ${samples.length}/${requiredSamples} collected`);
+      
+      if (samples.length < requiredSamples) {
+        const remaining = requiredSamples - samples.length;
+        document.getElementById('attempt-count').textContent = remaining;
+        alert(`Please type your password ${remaining} more time(s).`);
+        
+        passwordInput.value = '';
+        keyEvents.length = 0;
+        holdTimes.length = 0;
+        flightTimes.length = 0;
+        lastKeyUpTime = null;
+        return;
+      }
+      
+      const allHoldTimes = samples.flatMap(s => s.holdTimes);
+      const allFlightTimes = samples.flatMap(s => s.flightTimes);
+      
+      const meanHold = mean(allHoldTimes);
+      const stdHold = std(allHoldTimes);
+      const meanFlight = mean(allFlightTimes);
+      const stdFlight = std(allFlightTimes);
+      
+      console.log('Final profile:', {
+        samples: samples.length,
+        meanHold: meanHold.toFixed(2),
+        stdHold: stdHold.toFixed(2),
+        meanFlight: meanFlight.toFixed(2),
+        stdFlight: stdFlight.toFixed(2),
+        totalKeystrokes: allHoldTimes.length
+      });
+      
+      try {
+        const res = await fetch('/Sample', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username,
+            password,
+            meanHold,
+            stdHold,
+            meanFlight,
+            stdFlight
+          })
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          alert('Account created successfully! You can now log in.');
+          window.location.href = '/Login';
+        } else {
+          alert(result.message || 'Registration failed');
+          samples.length = 0;
+          currentPassword = '';
+          document.getElementById('attempt-count').textContent = requiredSamples;
+          passwordInput.value = '';
+          usernameInput.focus();
+        }
+      } catch (err) {
+        console.error('Registration error:', err);
+        alert('An error occurred. Please try again.');
+      }
+    });
+  </script>
+</body>
+</html>

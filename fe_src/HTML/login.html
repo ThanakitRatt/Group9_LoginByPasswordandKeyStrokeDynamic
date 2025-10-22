@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- Head -->
+<head>
+    <meta charset="UTF-8">
+    <title>Login_page</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Import CSS -->
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<!-- Body -->
+<body>
+    <!-- Main Content -->
+    <main>
+    <div class="movable-login-container">
+        <h1 class="weglow-title">Login</h1>
+        <form class="login-form">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" placeholder="Username">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" placeholder="Password">
+            <button type="submit" class="sign-in-btn">Sign in</button>
+        </form>
+    </div>
+</main>
+<script>
+  const keyEvents = [];
+  const holdTimes = [];
+  const flightTimes = [];
+  let lastKeyUpTime = null;
+
+  const passwordInput = document.querySelector('#password');
+
+  passwordInput.addEventListener('focus', () => {
+    keyEvents.length = 0;
+    holdTimes.length = 0;
+    flightTimes.length = 0;
+    lastKeyUpTime = null;
+  });
+
+  passwordInput.addEventListener('keydown', (e) => {
+    if (e.key.length > 1 && e.key !== 'Backspace') return;
+    
+    const now = performance.now();
+    keyEvents.push({ key: e.key, down: now });
+    
+    if (lastKeyUpTime !== null) {
+      const flight = now - lastKeyUpTime;
+      flightTimes.push(flight);
+    }
+  });
+
+  passwordInput.addEventListener('keyup', (e) => {
+    const now = performance.now();
+    const press = keyEvents.find(k => k.key === e.key && !k.up);
+    
+    if (press) {
+      press.up = now;
+      const hold = press.up - press.down;
+      holdTimes.push(hold);
+    }
+    
+    lastKeyUpTime = now;
+  });
+
+  function mean(arr) {
+    if (arr.length === 0) return 0;
+    return arr.reduce((a, b) => a + b, 0) / arr.length;
+  }
+
+  function std(arr) {
+    if (arr.length === 0) return 0;
+    const m = mean(arr);
+    const variance = arr.reduce((a, b) => a + (b - m) ** 2, 0) / arr.length;
+    return Math.sqrt(variance);
+  }
+
+  function removeOutliers(arr, maxValue) {
+    return arr.filter(t => t < maxValue && t > 0);
+  }
+
+  document.querySelector('.login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const username = document.querySelector('#username').value;
+    const password = document.querySelector('#password').value;
+    
+    if (holdTimes.length < 3 || flightTimes.length < 2) {
+      alert("Password too short");
+      return;
+    }
+    
+    const cleanHold = removeOutliers(holdTimes, 500);  
+    const cleanFlight = removeOutliers(flightTimes, 2000); 
+    
+    if (cleanHold.length < 3 || cleanFlight.length < 2) {
+      alert("Please type without long pauses");
+      return;
+    }
+    
+    const meanHold = mean(cleanHold);
+    const stdHold = std(cleanHold);
+    const meanFlight = mean(cleanFlight);
+    const stdFlight = std(cleanFlight);
+    
+    console.log('Submitting biometrics:', {
+      meanHold: meanHold.toFixed(2),
+      stdHold: stdHold.toFixed(2),
+      meanFlight: meanFlight.toFixed(2),
+      stdFlight: stdFlight.toFixed(2),
+      samples: { hold: cleanHold.length, flight: cleanFlight.length }
+    });
+    
+    try {
+      const response = await fetch('/form-submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          password,
+          meanHold,
+          stdHold,
+          meanFlight,
+          stdFlight
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        alert('Login successful!');
+        window.location.href = '/Hi';
+      } else {
+        alert(data.message || 'Login failed');
+        window.location.href = '/Fail';
+        keyEvents.length = 0;
+        holdTimes.length = 0;
+        flightTimes.length = 0;
+        lastKeyUpTime = null;
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Login error. Please try again.');
+    }
+  });
+</script>
+
+</body>
+</html>
